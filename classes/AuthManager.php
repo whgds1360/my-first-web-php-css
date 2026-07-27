@@ -15,8 +15,28 @@ class AuthManager{
     {
         $this->pdo = $pdo;
     }
+    
+    private function inSession() : bool{
+        if (isset($_SESSION) && !empty($_SESSION['user_id'])){
 
-    private function getData(){
+            $stmt = $this->pdo->prepare("SELECT id FROM users WHERE id = :id");
+            $stmt->execute([':id' => $_SESSION['user_id']]);
+            $id = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return $id !== false;
+        }
+
+        return false;
+    }
+
+    public function alwaysCheck() : void{
+        if (!$this->inSession()){
+            header('Location: index.php');
+            exit();
+        }
+    }
+
+    private function getData() : void{
         if ($_SERVER['REQUEST_METHOD'] === 'POST'){
             $this->us_login = trim($_POST['us_login'] ?? '');
             $this->us_password = trim($_POST['us_password'] ?? '');
@@ -38,8 +58,8 @@ class AuthManager{
 
     private function intoSession() : bool{
         if (isset($_SESSION)){
-            $_SESSION['us_login'] = $this->us_login;
             $_SESSION['user_id'] = $this->userData['id'] ?? null;
+            session_regenerate_id(true);
             return true;
         }
         else{
@@ -72,16 +92,13 @@ class AuthManager{
 
     public function logout() : bool{
         if (isset($_SESSION)){
-            session_unset();
+            $_SESSION = [];
             session_destroy();
             $this->status = 'Вы вышли из системы';
+            $this->userData = [];
             return true;
         }
         return false;
-    }
-
-    public function isLoggedIn() : bool{
-        return isset($_SESSION['us_login']) && !empty($_SESSION['us_login']);
     }
 
     public function getStatus() : string{
@@ -93,10 +110,25 @@ class AuthManager{
     }
 
     public function getCurrentUser() : ?array{
-        return $this->userData;
+        if (!empty($this->userData)){
+            return $this->userData;
+        }
+
+        if ($this->inSession()){
+            $stmt = $this->pdo->prepare('SELECT * FROM users WHERE id = :id');
+            $stmt->execute([':id' => $_SESSION['user_id']]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($user !== false) {
+            $this->userData = $user;
+            return $this->userData;
+        }
+        }
+        
+        return null;
     }
 
-    public function clearStatus(){
+    public function clearStatus() : void{
         $this->status = '';
     }
 }
